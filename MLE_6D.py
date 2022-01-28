@@ -20,11 +20,10 @@ nDiff = 1 # terms for the Diffusion coefficient
 # let's only regard up to second order    
 def poly(x,sigma):
     x_vec=np.array([1,x[0],x[1],x[2],x[3],x[4],x[5],  #7
-                   x[0]**2., x[1]**2., x[2]**2., x[3]**2., x[4]**2., x[5]**2., # 6 terms
-                    x[0]*x[1], x[0]*x[2], x[0]*x[3], x[0]*x[4], x[0]*x[5], # 5 terms
-                    x[1]*x[2], x[1]*x[3], x[1]*x[4], x[1]*x[5], # 4 terms
-                    x[2]*x[3], x[2]*x[4], x[2]*x[5], # 3 terms
-                    x[3]*x[4], x[3]*x[5], x[4]*x[5]]) # 3 terms
+                   x[0]**2.,  x[0]*x[1], x[0]*x[2], x[0]*x[3], x[0]*x[4], x[0]*x[5],# 6 terms
+                    x[1]**2.,x[1]*x[2], x[1]*x[3], x[1]*x[4], x[1]*x[5], # 5 terms
+                    x[2]**2.,  x[2]*x[3], x[2]*x[4], x[2]*x[5], # 4 terms
+                    x[3]**2., x[3]*x[4], x[3]*x[5], x[4]**2., x[4]*x[5], x[5]**2]) # 6 terms
     return np.dot(sigma,x_vec) # Total: 28 terms
 
 #@jit
@@ -77,8 +76,12 @@ def log_likelihood(alpha,x,dt):
                              np.dot(d2_inv[:,:,i].T,
                                     d1[i,:])) for i in range(len(x)-1)])
 
-        log_like = (-r/(2*dt)-np.log(np.sqrt(4*np.pi*dt)**Dim*np.sqrt(d2_det))).sum()
-        
+        # HERE: Instead of summing all components (i.e. every time step), 
+        #       one could just sum over a small subset to increase computation speed?
+        #print((-r/(2*dt)-np.log(np.sqrt(4*np.pi*dt)**Dim*np.sqrt(d2_det))).shape)
+        #log_like = (-r/(2*dt)-np.log(np.sqrt(4*np.pi*dt)**Dim*np.sqrt(d2_det))).sum()
+        log_like = (-r/(2*dt)-np.log(np.sqrt(4*np.pi*dt)**Dim*np.sqrt(d2_det)))
+        log_like = log_like.sum()
         return log_like
     else:
         return -np.inf
@@ -129,14 +132,15 @@ x = np.load(filename+'.npy')
 dx = x[1:]-x[:-1]  
 dt = float(filename[-4:])  #time step in file name
 Lambda = 0.5 # initial threshold
-
+print(x.shape)
 N = x[:,0].size
+
 
 
 # Set up variables for the hyperparameter search on threshold
 
 n_Cut = 5 # Number of reiterating
-hp1 = np.arange(0.05, 1.2, 0.5) # list of possible thresholds
+hp1 = np.arange(0.00, 1.2, 0.25) # list of possible thresholds
 n_Iteration = len(hp1) # Number of Hyperparameter search iterations
 score = np.empty(n_Iteration) # score for Hyperparameters
 
@@ -153,7 +157,7 @@ AlphaList = np.empty((n_Iteration, TestAl.size)) # store the results of each opt
 
 # comparison: the true parameters
 real = np.zeros(nDiff + Dim*nDrift)
-real[0]=0.1 #noise1
+real[0]= 2 #noise1
 
 # x1 component
 real[2] = -10. # x in x
@@ -162,12 +166,11 @@ real[3] = 10.  # y in x
 # y1 component
 real[30] = 28. # x in y
 real[31] = -1. # y in y
-real[43] = -1  # xz in y
+real[38] = -1  # xz in y
 
 # z1 component
 real[60] = -8./3. # z in z
-real[70] = 1. # xy in z
-                    
+real[65] = 1. # xy in z
                     
 # x2 component
 real[89] = -10.+ 1. # x in x
@@ -177,18 +180,21 @@ real[86] = -1 # coupling of the other system
 # y2 component
 real[117] = 28. # x in y
 real[118] = -1. # y in y
-real[139] = -1  # xz in y
+real[137] = -1  # xz in y
 
 # z2 component
 real[147] = -8./3. # z in z
-real[166] = 1. # xy in z
+real[164] = 1. # xy in z
 
 # to show the important terms
 output = (real!=0) #relevant terms
 
 
 
-TestAl = optimize.minimize(neg_log_likelihood, np.ones(nDiff + Dim*nDrift),args=(x[0:1000,:],dt)) # first estimation with little data
+TestAl = optimize.minimize(neg_log_likelihood, 
+                           np.ones(nDiff + Dim*nDrift),
+                           args=(x[0:1000,:],   # first estimation, maybe with little data
+                                 dt)) 
 
 TestAl = TestAl["x"]
 
