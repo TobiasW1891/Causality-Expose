@@ -13,7 +13,7 @@ import pandas as pd
 
 Dim = 6 # Dimensionality of the system
 nDrift = 28 # terms for each Dimension of the drift
-nDiff = 1 # terms for the Diffusion coefficient
+nDiff = 1 #+Dim # terms for the Diffusion coefficient
 
 
 
@@ -28,27 +28,31 @@ def poly(x,sigma):
 
 #@jit
 def D1(sigma,x):
-    sigma = sigma[1:] # without noise parameters
+    sigma = sigma[nDiff:] # without noise parameters
     sigma=sigma.reshape((Dim,-1))
     function=np.zeros((len(x),Dim))
     for i in range(Dim):
         function[:,i]=poly(x.T,sigma[i])
     return function
 
-
+def DiffTerm(alpha,x):
+    #x_vec = np.array([np.ones(x.shape[0])**2,x[:,0]**2, x[:,1]**2, 
+    #                  x[:,2]**2, x[:,3]**2, x[:,4]**2, x[:,5]**2])
+    #return(np.dot(alpha[0:nDiff], x_vec))
+    return(alpha[0])
 
 #@jit
 def D2(alpha,x):
-    return np.outer(np.eye(Dim,Dim),(alpha[0])).reshape((Dim,Dim,-1)) # Noise = alpha[0]
+    return np.outer(np.eye(Dim,Dim),DiffTerm(alpha,x)).reshape((Dim,Dim,-1)) # Noise = alpha[0:nDiff]
 
 
 def det_D2(alpha,x):
-    return (alpha[0]*np.ones(x.shape[0]))**Dim
+    return (DiffTerm(alpha,x)*np.ones(x.shape[0]))**Dim
 
 
 def inv_D2(alpha,x):
     return np.outer(np.eye(Dim,Dim),
-                    1/(alpha[0]*np.ones(x.shape[0]) )).reshape((Dim,Dim,-1))
+                    1/(DiffTerm(alpha,x)*np.ones(x.shape[0]) )).reshape((Dim,Dim,-1))
 
 
 #  Log Likelihood and negative logL
@@ -62,7 +66,7 @@ def log_likelihood(alpha,x,dt):
     
     #calculate D1 and D2 or each position in the data x
     
-    if alpha[0]>0: # noise must be positive!
+    if min(alpha[0:nDiff])>0: # noise must be positive!
         
         dx = x[1:,:]-x[:-1,:]  
         
@@ -95,7 +99,7 @@ def neg_log_likelihood(alpha,x,dt): #L Threshold Lambdac
 
 def second_neg_log_likelihood(Coeff, Index,x,dt):
     # Index: Index of those coefficients which are set to 0: Boolean 
-    Index[0] = False # noise NEVER cut off
+    Index[0:nDiff] = False # noise NEVER cut off
     Coeff[Index] = 0
     return -1*log_likelihood(Coeff,x,dt)
 
@@ -135,12 +139,13 @@ Lambda = 0.5 # initial threshold
 print(x.shape)
 N = x[:,0].size
 
-
+print("DiffTerm", DiffTerm(np.ones(nDiff + Dim*nDrift), x))
+print("D1", D1(np.ones(nDiff + Dim*nDrift), x))
 
 # Set up variables for the hyperparameter search on threshold
 
 n_Cut = 5 # Number of reiterating
-hp1 = np.arange(0.00, 1.2, 0.25) # list of possible thresholds
+hp1 = np.arange(0.00, 1.2, 0.1) # list of possible thresholds
 n_Iteration = len(hp1) # Number of Hyperparameter search iterations
 score = np.empty(n_Iteration) # score for Hyperparameters
 
@@ -158,33 +163,34 @@ AlphaList = np.empty((n_Iteration, TestAl.size)) # store the results of each opt
 # comparison: the true parameters
 real = np.zeros(nDiff + Dim*nDrift)
 real[0]= 2 #noise1
+IndexOffset = nDiff - 1 # "Standard": one Diffusion parameter
 
 # x1 component
-real[2] = -10. # x in x
-real[3] = 10.  # y in x
+real[2+IndexOffset] = -10. # x in x
+real[3+IndexOffset] = 10.  # y in x
 
 # y1 component
-real[30] = 28. # x in y
-real[31] = -1. # y in y
-real[38] = -1  # xz in y
+real[30+IndexOffset] = 28. # x in y
+real[31+IndexOffset] = -1. # y in y
+real[38+IndexOffset] = -1  # xz in y
 
 # z1 component
-real[60] = -8./3. # z in z
-real[65] = 1. # xy in z
+real[60+IndexOffset] = -8./3. # z in z
+real[65+IndexOffset] = 1. # xy in z
                     
 # x2 component
-real[89] = -10.+ 1. # x in x
-real[90] = 10.  # y in x
-real[86] = -1 # coupling of the other system
+real[89+IndexOffset] = -10.+ 1. # x in x
+real[90+IndexOffset] = 10.  # y in x
+real[86+IndexOffset] = -1 # coupling of the other system
 
 # y2 component
-real[117] = 28. # x in y
-real[118] = -1. # y in y
-real[137] = -1  # xz in y
+real[117+IndexOffset] = 28. # x in y
+real[118+IndexOffset] = -1. # y in y
+real[137+IndexOffset] = -1  # xz in y
 
 # z2 component
-real[147] = -8./3. # z in z
-real[164] = 1. # xy in z
+real[147+IndexOffset] = -8./3. # z in z
+real[164+IndexOffset] = 1. # xy in z
 
 # to show the important terms
 output = (real!=0) #relevant terms
